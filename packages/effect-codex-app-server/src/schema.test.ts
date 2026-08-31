@@ -74,6 +74,13 @@ it("accepts Codex 0.150 multi-agent values", () => {
   assert.equal(Schema.is(CodexSchema.V2ThreadResumeResponse)(resumeResponse), true);
 });
 
+it("accepts Codex rate limit errors when resuming a thread", () => {
+  assert.equal(
+    Schema.is(CodexSchema.V2ThreadResumeResponse__CodexErrorInfo)("rateLimitExceeded"),
+    true,
+  );
+});
+
 it("accepts Codex 0.150 account plan values", () => {
   const planTypes = [
     "self_serve_business_prolite",
