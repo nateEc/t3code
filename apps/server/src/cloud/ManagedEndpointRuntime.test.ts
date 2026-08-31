@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as RelayClient from "@t3tools/shared/relayClient";
 
@@ -240,7 +241,7 @@ describe("CloudManagedEndpointRuntime", () => {
     }),
   );
 
-  it.effect("supervises the active connector and restarts it after process exit", () =>
+  it.effect("waits before restarting an exited connector", () =>
     Effect.gen(function* () {
       const spawned: Array<number> = [];
       const killed: Array<number> = [];
@@ -275,6 +276,12 @@ describe("CloudManagedEndpointRuntime", () => {
         tunnelId: "tunnel-1",
       });
       yield* Deferred.succeed(firstExit, ChildProcessSpawner.ExitCode(1));
+      yield* Effect.yieldNow;
+
+      expect(spawned).toEqual([400]);
+      yield* TestClock.adjust("4 seconds");
+      expect(spawned).toEqual([400]);
+      yield* TestClock.adjust("1 second");
       yield* Deferred.await(secondSpawned);
 
       expect(started).toMatchObject({ status: "running", pid: 400 });

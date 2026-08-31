@@ -99,6 +99,8 @@ const stopConnector = (connector: ActiveConnector | null) =>
       )
     : Effect.void;
 
+const RELAY_CONNECTOR_RESTART_DELAY = "5 seconds";
+
 export const make = Effect.gen(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const relayClient = yield* RelayClient.RelayClient;
@@ -115,14 +117,14 @@ export const make = Effect.gen(function* () {
   const superviseConnector = (connector: ActiveConnector) =>
     Effect.gen(function* () {
       const result = yield* Effect.result(connector.child.exitCode);
-      yield* reconcileSemaphore.withPermits(1)(
+      const restartConfig = yield* reconcileSemaphore.withPermits(1)(
         Effect.gen(function* () {
           const active = yield* Ref.get(activeRef);
           if (
             active?.child.pid !== connector.child.pid ||
             active.configKey !== connector.configKey
           ) {
-            return;
+            return null;
           }
           yield* Ref.set(activeRef, null);
           yield* stopConnector(connector);
@@ -133,7 +135,7 @@ export const make = Effect.gen(function* () {
             desiredConfig.providerKind !== "cloudflare_tunnel" ||
             runtimeConfigKey(desiredConfig) !== connector.configKey
           ) {
-            return;
+            return null;
           }
 
           yield* Effect.logWarning("Relay client exited; restarting", {
@@ -144,6 +146,26 @@ export const make = Effect.gen(function* () {
             tunnelId: connector.config.tunnelId,
             tunnelName: connector.config.tunnelName,
           });
+          return desiredConfig;
+        }),
+      );
+      if (!restartConfig) {
+        return;
+      }
+
+      // Do not hold the reconcile lock while waiting: a user can still change
+      // or disable T3 Connect instead of waiting behind a failed child.
+      yield* Effect.sleep(RELAY_CONNECTOR_RESTART_DELAY);
+      yield* reconcileSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const desiredConfig = yield* Ref.get(desiredConfigRef);
+          if (
+            !desiredConfig ||
+            desiredConfig.providerKind !== "cloudflare_tunnel" ||
+            runtimeConfigKey(desiredConfig) !== connector.configKey
+          ) {
+            return;
+          }
           yield* reconcileConfig(desiredConfig);
         }),
       );
