@@ -71,6 +71,11 @@ function makeFakeClaudeBinary(dir: string) {
         '  fail("CLAUDE_CONFIG_DIR was " + (process.env.CLAUDE_CONFIG_DIR ?? ""), 5);',
         "}",
         "",
+        "const cwdMustNotBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;",
+        "if (cwdMustNotBe && process.cwd() === cwdMustNotBe) {",
+        '  fail("Claude ran from a forbidden cwd", 6);',
+        "}",
+        "",
         "const stderrText = process.env.T3_FAKE_CLAUDE_STDERR;",
         "if (stderrText) {",
         '  process.stderr.write(stderrText + "\\n");',
@@ -111,6 +116,7 @@ function withFakeClaudeEnv<A, E, R>(
     argsMustNotContain?: string;
     stdinMustContain?: string;
     configDirMustBe?: string;
+    cwdMustNotBe?: string;
     claudeConfig?: Partial<ClaudeSettings>;
   },
   effectFn: (textGeneration: TextGeneration.TextGeneration["Service"]) => Effect.Effect<A, E, R>,
@@ -128,6 +134,7 @@ function withFakeClaudeEnv<A, E, R>(
     const previousArgsMustNotContain = process.env.T3_FAKE_CLAUDE_ARGS_MUST_NOT_CONTAIN;
     const previousStdinMustContain = process.env.T3_FAKE_CLAUDE_STDIN_MUST_CONTAIN;
     const previousConfigDirMustBe = process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
+    const previousCwdMustNotBe = process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -168,6 +175,12 @@ function withFakeClaudeEnv<A, E, R>(
           process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = input.configDirMustBe;
         } else {
           delete process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
+        }
+
+        if (input.cwdMustNotBe !== undefined) {
+          process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE = input.cwdMustNotBe;
+        } else {
+          delete process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
         }
       }),
       () =>
@@ -214,6 +227,12 @@ function withFakeClaudeEnv<A, E, R>(
             delete process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE;
           } else {
             process.env.T3_FAKE_CLAUDE_CONFIG_DIR_MUST_BE = previousConfigDirMustBe;
+          }
+
+          if (previousCwdMustNotBe === undefined) {
+            delete process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE;
+          } else {
+            process.env.T3_FAKE_CLAUDE_CWD_MUST_NOT_BE = previousCwdMustNotBe;
           }
         }),
     );
@@ -300,6 +319,9 @@ it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
           },
         }),
         stdinMustContain: "Please investigate reconnect failures after restarting the session.",
+        argsMustContain: "--tools",
+        argsMustNotContain: "--dangerously-skip-permissions",
+        cwdMustNotBe: process.cwd(),
       },
       (textGeneration) =>
         Effect.gen(function* () {

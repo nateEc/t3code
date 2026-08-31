@@ -7,6 +7,8 @@
  *
  * @module ClaudeTextGeneration
  */
+import { tmpdir } from "node:os";
+
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -110,6 +112,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     prompt,
     outputSchemaJson,
     modelSelection,
+    toolAccess = "default",
   }: {
     operation:
       | "generateCommitMessage"
@@ -120,6 +123,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     prompt: string;
     outputSchemaJson: S;
     modelSelection: ModelSelection;
+    toolAccess?: "default" | "none";
   }): Effect.fn.Return<S["Type"], TextGenerationError, S["DecodingServices"]> {
     const jsonSchemaStr = yield* encodeJsonForOperation(
       operation,
@@ -169,7 +173,7 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
           resolveClaudeApiModelId(modelSelection),
           ...(cliEffort ? ["--effort", cliEffort] : []),
           ...(settingsJson ? ["--settings", settingsJson] : []),
-          "--dangerously-skip-permissions",
+          ...(toolAccess === "none" ? ["--tools", ""] : ["--dangerously-skip-permissions"]),
         ],
         { env: claudeEnvironment },
       );
@@ -348,10 +352,13 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
 
       const generated = yield* runClaudeJson({
         operation: "generateThreadTitle",
-        cwd: input.cwd,
+        // A title is text-only. Keep the process outside the user's checkout
+        // and remove every tool so a model cannot act on the embedded prompt.
+        cwd: tmpdir(),
         prompt,
         outputSchemaJson: outputSchema,
         modelSelection: input.modelSelection,
+        toolAccess: "none",
       });
 
       return {
