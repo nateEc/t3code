@@ -199,8 +199,12 @@ function applyCodex0151DefinitionCompatibility(
   definitionName: string,
   definitionSchema: Schema.Json,
 ): Schema.Json {
+  const isThreadResponse =
+    exportName === "V2ThreadReadResponse" ||
+    exportName === "V2ThreadResumeResponse" ||
+    exportName === "V2ThreadRollbackResponse";
   if (
-    exportName !== "V2ThreadResumeResponse" ||
+    !isThreadResponse ||
     definitionName !== "CodexErrorInfo" ||
     typeof definitionSchema !== "object"
   ) {

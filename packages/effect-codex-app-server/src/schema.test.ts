@@ -74,11 +74,16 @@ it("accepts Codex 0.150 multi-agent values", () => {
   assert.equal(Schema.is(CodexSchema.V2ThreadResumeResponse)(resumeResponse), true);
 });
 
-it("accepts Codex rate limit errors when resuming a thread", () => {
-  assert.equal(
-    Schema.is(CodexSchema.V2ThreadResumeResponse__CodexErrorInfo)("rateLimitExceeded"),
-    true,
-  );
+it("accepts Codex rate limit errors for thread responses", () => {
+  const schemas = [
+    CodexSchema.V2ThreadReadResponse__CodexErrorInfo,
+    CodexSchema.V2ThreadResumeResponse__CodexErrorInfo,
+    CodexSchema.V2ThreadRollbackResponse__CodexErrorInfo,
+  ];
+
+  for (const schema of schemas) {
+    assert.equal(Schema.is(schema)("rateLimitExceeded"), true);
+  }
 });
 
 it("accepts Codex 0.150 account plan values", () => {
