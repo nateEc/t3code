@@ -1585,6 +1585,19 @@ describe("buildThreadFeed", () => {
       ],
       activities: [
         makeActivity({
+          id: EventId.make("tool-completed"),
+          kind: "tool.completed",
+          tone: "tool",
+          summary: "Read files",
+          createdAt: "2026-04-01T00:00:01.000Z",
+          turnId,
+          payload: {
+            title: "Read files",
+            itemType: "file_read",
+            status: "completed",
+          },
+        }),
+        makeActivity({
           id: EventId.make("spawned-agent"),
           kind: "task.progress",
           tone: "tool",
@@ -1605,8 +1618,11 @@ describe("buildThreadFeed", () => {
       new Set(),
     );
 
-    expect(rows.map((entry) => entry.id)).toEqual(["spawned-agent", "assistant-final"]);
-    expect(rows).not.toContainEqual(expect.objectContaining({ type: "turn-fold" }));
+    expect(rows.map((entry) => entry.id)).toEqual([
+      "turn-fold:turn-spawned-agent",
+      "spawned-agent",
+      "assistant-final",
+    ]);
   });
 
   it("keeps a substantive answer visible before trailing provider commentary", () => {

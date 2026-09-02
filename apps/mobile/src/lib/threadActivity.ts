@@ -1262,6 +1262,7 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
   // long tool runs). The array is only mutated while it is the trailing group.
   let openGroupActivities: ThreadFeedActivity[] | null = null;
   let openGroupTurnId: TurnId | null = null;
+  let openGroupHasAgentSpawn = false;
 
   for (const entry of entries) {
     // Skip empty messages so they don't break activity grouping.
@@ -1287,13 +1288,19 @@ function groupAdjacentActivities(entries: ReadonlyArray<RawThreadFeedEntry>): Th
       continue;
     }
 
-    if (openGroupActivities !== null && openGroupTurnId === entry.turnId) {
+    if (
+      openGroupActivities !== null &&
+      openGroupTurnId === entry.turnId &&
+      !openGroupHasAgentSpawn &&
+      entry.activity.workEntry.agentSpawn !== true
+    ) {
       openGroupActivities.push(entry.activity);
       continue;
     }
 
     openGroupActivities = [entry.activity];
     openGroupTurnId = entry.turnId;
+    openGroupHasAgentSpawn = entry.activity.workEntry.agentSpawn === true;
     grouped.push({
       type: "activity-group",
       id: entry.id,
