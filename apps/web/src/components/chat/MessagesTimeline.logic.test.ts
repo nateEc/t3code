@@ -700,7 +700,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
 
-  it("folds the first assistant message and settled work before the terminal response", () => {
+  it("keeps assistant messages visible around settled work", () => {
     const timelineEntries = [
       {
         id: "user-entry",
@@ -776,6 +776,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(foldRow?.label).toBe("Worked for 22s");
     expect(collapsedRows.map((row) => row.id)).toEqual([
       "user-entry",
+      "assistant-first-entry",
       "turn-fold:turn-1",
       "assistant-final-entry",
     ]);
@@ -791,7 +792,6 @@ describe("deriveMessagesTimelineRows", () => {
 
     expect(expandedRows.map((row) => row.id)).toEqual([
       "user-entry",
-      "turn-fold:turn-1",
       "assistant-first-entry",
       "work-entry-1",
       "assistant-final-entry",
