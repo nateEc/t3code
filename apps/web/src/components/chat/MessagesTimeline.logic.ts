@@ -622,6 +622,7 @@ function deriveTurnFolds(input: {
           entry.kind === "message" &&
           entry.message.role === "assistant" &&
           entry.message.text.trim().length === 0 &&
+          (entry.message.attachments?.length ?? 0) === 0 &&
           !input.terminalAssistantMessageIds.has(entry.message.id)
         ) {
           hiddenEntryIds.add(entry.id);

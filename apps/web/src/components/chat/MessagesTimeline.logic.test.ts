@@ -1399,60 +1399,79 @@ describe("deriveMessagesTimelineRows", () => {
     ).toBeDefined();
   });
 
-  it("folds blank assistant commentary before the terminal response", () => {
-    const timelineEntries = [
-      {
-        id: "work-entry-1",
-        kind: "work" as const,
-        createdAt: "2026-01-01T00:00:01Z",
-        entry: {
-          id: "work-1",
+  it.each([undefined, "image", "file"] as const)(
+    "folds blank commentary only when it has no attachment (%s)",
+    (attachmentType) => {
+      const timelineEntries = [
+        {
+          id: "work-entry-1",
+          kind: "work" as const,
           createdAt: "2026-01-01T00:00:01Z",
-          turnId: "turn-1" as never,
-          label: "Ran command",
-          tone: "tool" as const,
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:01Z",
+            turnId: "turn-1" as never,
+            label: "Ran command",
+            tone: "tool" as const,
+          },
         },
-      },
-      {
-        id: "assistant-empty-entry",
-        kind: "message" as const,
-        createdAt: "2026-01-01T00:00:02Z",
-        message: {
-          id: "assistant-empty" as never,
-          role: "assistant" as const,
-          text: "",
-          turnId: "turn-1" as never,
+        {
+          id: "assistant-empty-entry",
+          kind: "message" as const,
           createdAt: "2026-01-01T00:00:02Z",
-          updatedAt: "2026-01-01T00:00:02Z",
-          streaming: false,
+          message: {
+            id: "assistant-empty" as never,
+            role: "assistant" as const,
+            text: "",
+            attachments:
+              attachmentType === undefined
+                ? []
+                : [
+                    {
+                      type: attachmentType,
+                      id: "attachment",
+                      name: attachmentType === "image" ? "result.png" : "result.txt",
+                      mimeType: attachmentType === "image" ? "image/png" : "text/plain",
+                      sizeBytes: 42,
+                    },
+                  ],
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:02Z",
+            updatedAt: "2026-01-01T00:00:02Z",
+            streaming: false,
+          },
         },
-      },
-      {
-        id: "assistant-final-entry",
-        kind: "message" as const,
-        createdAt: "2026-01-01T00:00:03Z",
-        message: {
-          id: "assistant-final" as never,
-          role: "assistant" as const,
-          text: "Done",
-          turnId: "turn-1" as never,
+        {
+          id: "assistant-final-entry",
+          kind: "message" as const,
           createdAt: "2026-01-01T00:00:03Z",
-          updatedAt: "2026-01-01T00:00:03Z",
-          streaming: false,
+          message: {
+            id: "assistant-final" as never,
+            role: "assistant" as const,
+            text: "Done",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:03Z",
+            updatedAt: "2026-01-01T00:00:03Z",
+            streaming: false,
+          },
         },
-      },
-    ];
+      ];
 
-    const rows = deriveMessagesTimelineRows({
-      timelineEntries,
-      isWorking: false,
-      activeTurnStartedAt: null,
-      turnDiffSummaries: [],
-      supportsConversationRollback: false,
-    });
+      const rows = deriveMessagesTimelineRows({
+        timelineEntries,
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaries: [],
+        supportsConversationRollback: false,
+      });
 
-    expect(rows.map((row) => row.id)).toEqual(["turn-fold:turn-1", "assistant-final-entry"]);
-  });
+      expect(rows.map((row) => row.id)).toEqual(
+        attachmentType === undefined
+          ? ["turn-fold:turn-1", "assistant-final-entry"]
+          : ["turn-fold:turn-1", "assistant-empty-entry", "assistant-final-entry"],
+      );
+    },
+  );
 
   it("keeps a tool group after the terminal response visible when the turn is folded", () => {
     const turnId = TurnId.make("turn-1");
