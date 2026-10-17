@@ -873,6 +873,7 @@ describe("buildThreadFeed", () => {
       "message-user",
       "message-opening",
       "run-fold:run-1",
+      "message-middle",
       "message-assistant",
     ]);
     expect(collapsed[1]).toMatchObject({ message: { text: opening.text } });
@@ -1058,6 +1059,40 @@ describe("buildThreadFeed", () => {
 
     const finished = present([subagent("item-done", "2026-06-20T00:00:03.000Z", 2, "completed")]);
     expect(finished.map((entry) => entry.type)).toEqual(["message", "run-fold", "message"]);
+  });
+
+  it("preserves the middle assistant answer when a settled run ends with a progress note", () => {
+    const answer = (id: string, text: string, ordinal: number): OrchestrationV2TurnItem => ({
+      ...assistantMessage(`2026-06-20T00:00:0${ordinal}.000Z`),
+      id: TurnItemId.make(id),
+      messageId: MessageId.make(id),
+      text,
+    });
+    const feed = buildThreadFeed([
+      projected(userMessage(), 0),
+      projected(answer("intro", "I will inspect this.", 1), 1),
+      projected(command("2026-06-20T00:00:02.000Z"), 2),
+      projected(answer("answer", "The substantive answer.", 3), 3),
+      projected(answer("progress", "Checking one more detail.", 4), 4),
+    ]);
+    const latestRun = {
+      runId,
+      status: "completed" as const,
+      startedAt: "2026-06-20T00:00:00.000Z",
+      completedAt: "2026-06-20T00:00:04.000Z",
+    };
+    for (const expanded of [false, true]) {
+      const rows = deriveThreadFeedPresentation(
+        feed,
+        latestRun,
+        expanded ? new Set([runId]) : new Set(),
+      );
+      expect(
+        rows.flatMap((row) =>
+          row.type === "message" && row.message.role === "assistant" ? [row.message.text] : [],
+        ),
+      ).toEqual(["I will inspect this.", "The substantive answer.", "Checking one more detail."]);
+    }
   });
 
   it("folds settled V2 run work while keeping the terminal assistant message visible", () => {

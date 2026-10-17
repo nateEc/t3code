@@ -1064,6 +1064,13 @@ function deriveTurnFolds(input: {
       ? group.entries.findIndex((entry) => entry.id === group.terminalEntry?.id)
       : group.entries.length;
     for (const [index, entry] of group.entries.entries()) {
+      if (
+        entry.kind === "message" &&
+        entry.message.role === "assistant" &&
+        (entry.message.text.trim().length > 0 || (entry.message.attachments?.length ?? 0) > 0)
+      ) {
+        continue;
+      }
       if (entry.id === group.terminalEntry?.id) {
         continue;
       }

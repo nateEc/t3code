@@ -1139,6 +1139,7 @@ function deriveThreadFeedRunFolds(
           (entry) =>
             entry.id !== firstAssistantId &&
             entry.id !== terminalAssistantId &&
+            !(entry.type === "message" && entry.message.role === "assistant") &&
             entry.type !== "html-render" &&
             entry.type !== "mcp-app" &&
             !(
