@@ -222,6 +222,7 @@ it.effect.each(
       commandText: "/compact keep the tests",
     },
     { ...storageCase, commandDriver: ProviderDriverKind.make("opencode"), commandText: "/review" },
+    { ...storageCase, commandDriver: driver, commandText: "/goal finish the work" },
   ]),
 )(
   "$storage: controls and replies read only their exact durable targets ($commandDriver)",
@@ -350,15 +351,18 @@ it.effect.each(
           payload: {
             ...messageEvent.payload,
             text: commandText,
-            attachments: [
-              {
-                type: "file",
-                id: "command-attachment",
-                name: "notes.txt",
-                mimeType: "text/plain",
-                sizeBytes: 1,
-              },
-            ],
+            attachments:
+              commandDriver === "codex"
+                ? []
+                : [
+                    {
+                      type: "file",
+                      id: "command-attachment",
+                      name: "notes.txt",
+                      mimeType: "text/plain",
+                      sizeBytes: 1,
+                    },
+                  ],
             createdBy: "agent",
             creationSource: "mcp",
             senderThreadId: ThreadId.make("thread:sender"),
@@ -371,7 +375,12 @@ it.effect.each(
           providerSessionId,
           messageId,
         });
-        assert.equal(calls.at(-1), commandText);
+        const deliveredCommandText = calls.at(-1);
+        if (commandDriver === "pi") assert.equal(deliveredCommandText, commandText);
+        else {
+          assert.include(deliveredCommandText, "not a message from the human user");
+          assert.isTrue(deliveredCommandText?.endsWith(`\n\n${commandText}`));
+        }
         const wrongSession = ProviderSessionId.make("session:wrong");
         assert.equal(
           (yield* Effect.exit(
@@ -410,7 +419,7 @@ it.effect.each(
           "Use the smaller fix.",
           "reply",
           agentText,
-          commandText,
+          deliveredCommandText,
           "interrupt",
         ]);
       }).pipe(

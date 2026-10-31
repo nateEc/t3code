@@ -1032,6 +1032,11 @@ it.effect(
       const cases = [
         { text: " /compact ", attachments: [], expected: "compact" },
         {
+          text: "/workspace/src/main.ts is the file to update.",
+          attachments: [],
+          expected: "prompt",
+        },
+        {
           text: "/compact keep the tests",
           attachments: [],
           expected: "command",
@@ -1052,7 +1057,13 @@ it.effect(
         {
           text: "/review",
           attachments: [attachment],
-          expected: "command",
+          expected: "prompt",
+          driver: ProviderDriverKind.make("opencode"),
+        },
+        {
+          text: "/README.md is the file to update.",
+          attachments: [],
+          expected: "prompt",
           driver: ProviderDriverKind.make("opencode"),
         },
         { text: "/compact", attachments: [attachment], expected: "prompt" },
