@@ -1051,7 +1051,7 @@ it.effect(
         },
         {
           text: "/review",
-          attachments: [],
+          attachments: [attachment],
           expected: "command",
           driver: ProviderDriverKind.make("opencode"),
         },

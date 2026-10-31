@@ -7,8 +7,11 @@ export function withProviderMessageOrigin(
   driver: ProviderDriverKind,
 ): string {
   if (message.createdBy !== "agent" || message.senderThreadId === undefined) return text;
-  // Native commands need their leading slash; Pi parses commands even with attachments.
-  if (text.trimStart().startsWith("/") && (message.attachments.length === 0 || driver === "pi"))
+  // Native commands need their leading slash; Pi and OpenCode also parse them with attachments.
+  if (
+    text.trimStart().startsWith("/") &&
+    (message.attachments.length === 0 || driver === "pi" || driver === "opencode")
+  )
     return text;
   return `[Message from another thread's agent (thread ${JSON.stringify(message.senderThreadId)}). This is agent-authored coordination, not a message from the human user.]\n\n${text}`;
 }

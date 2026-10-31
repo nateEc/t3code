@@ -214,9 +214,18 @@ it.effect.each(storageCases)(
       assert.isUndefined((yield* store.getRunningTurnContext(threadId)).providerTurn);
     }).pipe(Effect.provide(storeLayer)),
 );
-it.effect.each(storageCases)(
-  "$storage: controls and replies read only their exact durable targets",
-  ({ storage, storeLayer }) =>
+it.effect.each(
+  storageCases.flatMap((storageCase) => [
+    {
+      ...storageCase,
+      commandDriver: ProviderDriverKind.make("pi"),
+      commandText: "/compact keep the tests",
+    },
+    { ...storageCase, commandDriver: ProviderDriverKind.make("opencode"), commandText: "/review" },
+  ]),
+)(
+  "$storage: controls and replies read only their exact durable targets ($commandDriver)",
+  ({ storage, storeLayer, commandDriver, commandText }) =>
     Effect.gen(function* () {
       const store = yield* ProjectionStore.ProjectionStoreV2;
       const now = yield* DateTime.now;
@@ -275,7 +284,7 @@ it.effect.each(storageCases)(
       const layerSessions = Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({
         get: () =>
           Effect.succeedSome({
-            driver: ProviderDriverKind.make("pi"),
+            driver: commandDriver,
             interruptTurn: () =>
               Effect.sync(() => {
                 calls.push("interrupt");
@@ -335,13 +344,21 @@ it.effect.each(storageCases)(
           (yield* store.getProviderControlContext(threadId, target)).message?.text,
           "Use the smaller fix.",
         );
-        const compactText = "/compact keep the tests";
         yield* store.apply({
           ...messageEvent,
           id: EventId.make("control:agent-compact"),
           payload: {
             ...messageEvent.payload,
-            text: compactText,
+            text: commandText,
+            attachments: [
+              {
+                type: "file",
+                id: "command-attachment",
+                name: "notes.txt",
+                mimeType: "text/plain",
+                sizeBytes: 1,
+              },
+            ],
             createdBy: "agent",
             creationSource: "mcp",
             senderThreadId: ThreadId.make("thread:sender"),
@@ -354,7 +371,7 @@ it.effect.each(storageCases)(
           providerSessionId,
           messageId,
         });
-        assert.equal(calls.at(-1), compactText);
+        assert.equal(calls.at(-1), commandText);
         const wrongSession = ProviderSessionId.make("session:wrong");
         assert.equal(
           (yield* Effect.exit(
@@ -393,7 +410,7 @@ it.effect.each(storageCases)(
           "Use the smaller fix.",
           "reply",
           agentText,
-          compactText,
+          commandText,
           "interrupt",
         ]);
       }).pipe(
