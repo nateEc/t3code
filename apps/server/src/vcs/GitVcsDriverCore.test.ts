@@ -5000,40 +5000,35 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
           yield* git(cwd, ["remote", "add", "origin", `http://127.0.0.1:${address.port}/`]);
           const driver = yield* GitVcsDriver.GitVcsDriver;
           const fetch = driver.fetchRemote({ cwd, remoteName: "origin" });
-          const inherited = { GIT_ASKPASS: helper };
-          assert.isTrue(
-            Result.isFailure(
-              yield* Effect.result(
-                fetch.pipe(Effect.provideService(HostProcess.Environment, inherited)),
+          let invocations = "";
+          for (const setting of [undefined, "1", "0", "true"]) {
+            const result = yield* Effect.result(
+              fetch.pipe(
+                Effect.provideService(HostProcess.Environment, {
+                  GIT_ASKPASS: helper,
+                  T3CODE_GIT_PRESERVE_ASKPASS: setting,
+                }),
               ),
-            ),
-          );
-          assert.isFalse(yield* fs.exists(helperLog));
-          yield* fetch.pipe(
-            Effect.provideService(HostProcess.Environment, {
-              ...inherited,
-              T3CODE_GIT_PRESERVE_ASKPASS: "1",
-            }),
-          );
-          assert.strictEqual(
-            yield* git(cwd, ["rev-parse", `refs/remotes/origin/${initialBranch}`]),
-            remoteHead,
-          );
-          assert.isTrue(yield* fs.exists(helperLog));
-          const invocations = yield* fs.readFileString(helperLog);
-          assert.isTrue(
-            Result.isFailure(
-              yield* Effect.result(
-                fetch.pipe(
-                  Effect.provideService(HostProcess.Environment, {
-                    ...inherited,
-                    T3CODE_GIT_PRESERVE_ASKPASS: "0",
-                  }),
-                ),
-              ),
-            ),
-          );
-          assert.strictEqual(yield* fs.readFileString(helperLog), invocations);
+            );
+            if (setting === "1") {
+              assert.isTrue(Result.isSuccess(result));
+              assert.strictEqual(
+                yield* git(cwd, ["rev-parse", `refs/remotes/origin/${initialBranch}`]),
+                remoteHead,
+              );
+              invocations = yield* fs.readFileString(helperLog);
+              assert.isNotEmpty(invocations);
+            } else {
+              assert.isTrue(Result.isFailure(result));
+              if (Result.isFailure(result)) {
+                assert.include(result.failure.detail, "Git could not authenticate with the remote");
+              }
+              assert.strictEqual(
+                (yield* fs.exists(helperLog)) ? yield* fs.readFileString(helperLog) : "",
+                invocations,
+              );
+            }
+          }
         }),
     );
 
