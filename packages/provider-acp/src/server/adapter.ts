@@ -4615,6 +4615,8 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             update.sessionUpdate === "compaction_update" &&
             update.status === "completed"
           ) {
+            // Deferred finalization can still publish a receipt after marking itself finalized.
+            if (context !== null) yield* Deferred.await(context.completed);
             const known = (yield* Ref.get(providerThreadByNativeSessionId)).get(
               notification.sessionId,
             );

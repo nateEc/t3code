@@ -6093,6 +6093,7 @@ describe("AcpAdapterV2", () => {
           const secondChildSessionId = "mock-child-session-finalize-window-second";
           let firstSubagentStatus: "running" | "completed" = "running";
           let secondSubagentStatus: "waiting" | "completed" = "waiting";
+          let backgroundTurn = false;
           type RuntimeService = AcpSessionRuntime.AcpSessionRuntime["Service"];
           let sessionUpdateHandler:
             | Parameters<RuntimeService["handleSessionUpdate"]>[0]
@@ -6110,6 +6111,7 @@ describe("AcpAdapterV2", () => {
               deferFinalizeForBackgroundWork: true,
               enablePostSettleContinuation: true,
               extractSubagentUpdate: (toolCall) => {
+                if (!backgroundTurn) return undefined;
                 if (toolCall.toolCallId === "tool-call-generic-1") {
                   return {
                     nativeTaskId: "task-finalize-window-first",
@@ -6178,7 +6180,7 @@ describe("AcpAdapterV2", () => {
             Stream.runForEach((event) => Queue.offer(events, event)),
             Effect.forkScoped,
           );
-          const providerThread = yield* runtime.ensureThread({
+          let providerThread = yield* runtime.ensureThread({
             threadId,
             modelSelection,
             runtimePolicy,
@@ -6186,6 +6188,16 @@ describe("AcpAdapterV2", () => {
           const now = yield* DateTime.now;
           yield* runtime.startTurn(
             makeTurnInput({ threadId, providerThread, instanceId, runtimePolicy, now }),
+          );
+          while (true) {
+            const event = yield* Queue.take(events);
+            if (event.type === "provider_thread.updated") providerThread = event.providerThread;
+            if (event.type === "turn.terminal") break;
+          }
+          assert.isNotNull(providerThread.nativeMetadata?.acpInstructions);
+          backgroundTurn = true;
+          yield* runtime.startTurn(
+            makeTurnInput({ threadId, providerThread, instanceId, runtimePolicy, now, ordinal: 2 }),
           );
           yield* Deferred.await(promptSettled);
           yield* TestClock.adjust("1 second");
@@ -6237,20 +6249,30 @@ describe("AcpAdapterV2", () => {
               rawOutput: { content: "SECOND_DONE" },
             },
           });
+          const compactFiber = yield* sessionUpdateHandler!({
+            sessionId: "mock-session-1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "finalization-window",
+              status: "completed",
+            },
+          }).pipe(Effect.forkScoped({ startImmediately: true }));
           yield* Deferred.succeed(releaseFinalizationClockRead, undefined);
           yield* Fiber.join(adjustFiber);
+          yield* Fiber.join(compactFiber);
           yield* Effect.yieldNow;
           yield* Effect.yieldNow;
 
           const providerTurnId = idAllocator.derive.providerTurn({
             driver: ACP_TEST_DRIVER,
-            nativeTurnId: acpScopedNativeId(instanceId, "mock-session-1:turn:1"),
+            nativeTurnId: acpScopedNativeId(instanceId, "mock-session-1:turn:2"),
           });
           let completedSubagentUpdates = 0;
           let rootTerminalStatus: string | null = null;
           let polled = yield* Queue.poll(events);
           while (Option.isSome(polled)) {
             const event = polled.value;
+            if (event.type === "provider_thread.updated") providerThread = event.providerThread;
             if (
               event.type === "turn_item.updated" &&
               event.turnItem.type === "subagent" &&
@@ -6265,6 +6287,7 @@ describe("AcpAdapterV2", () => {
             polled = yield* Queue.poll(events);
           }
           assert.equal(rootTerminalStatus, "completed");
+          assert.isNull(providerThread.nativeMetadata?.acpInstructions);
           assert.equal(completedSubagentUpdates, 1);
           assert.isFalse(
             yield* hasPendingBackgroundWork,
