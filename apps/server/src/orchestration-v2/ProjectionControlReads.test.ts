@@ -275,6 +275,7 @@ it.effect.each(storageCases)(
       const layerSessions = Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({
         get: () =>
           Effect.succeedSome({
+            driver: ProviderDriverKind.make("pi"),
             interruptTurn: () =>
               Effect.sync(() => {
                 calls.push("interrupt");
@@ -334,6 +335,26 @@ it.effect.each(storageCases)(
           (yield* store.getProviderControlContext(threadId, target)).message?.text,
           "Use the smaller fix.",
         );
+        const compactText = "/compact keep the tests";
+        yield* store.apply({
+          ...messageEvent,
+          id: EventId.make("control:agent-compact"),
+          payload: {
+            ...messageEvent.payload,
+            text: compactText,
+            createdBy: "agent",
+            creationSource: "mcp",
+            senderThreadId: ThreadId.make("thread:sender"),
+          },
+        });
+        yield* control.steer({
+          threadId,
+          providerThreadId,
+          providerTurnId,
+          providerSessionId,
+          messageId,
+        });
+        assert.equal(calls.at(-1), compactText);
         const wrongSession = ProviderSessionId.make("session:wrong");
         assert.equal(
           (yield* Effect.exit(
@@ -357,7 +378,7 @@ it.effect.each(storageCases)(
           ))._tag,
           "Failure",
         );
-        assert.lengthOf(calls, 4);
+        assert.lengthOf(calls, 5);
         const turn = context.providerTurn!;
         yield* store.apply({
           id: EventId.make("control:turn-completed"),
@@ -372,6 +393,7 @@ it.effect.each(storageCases)(
           "Use the smaller fix.",
           "reply",
           agentText,
+          compactText,
           "interrupt",
         ]);
       }).pipe(

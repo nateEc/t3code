@@ -3,7 +3,6 @@ import { withProviderMessageOrigin } from "./providerMessageOrigin.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
   isOrchestrationV2WorkActive,
-  parseGoalCommand,
   CommandId,
   type EventId,
   type ModelSelection,
@@ -1679,9 +1678,6 @@ export const layer: Layer.Layer<
         const compact =
           input.message.attachments.length === 0 &&
           input.message.text.trim().toLowerCase() === "/compact";
-        const goalCommand =
-          (input.session.driver === "codex" || input.session.driver === "claudeAgent") &&
-          parseGoalCommand(input.message) !== null;
         const startTurn = compact
           ? (input.session.compactThread?.(turnInput) ??
             Effect.fail(
@@ -1697,9 +1693,11 @@ export const layer: Layer.Layer<
               ...turnInput,
               message: {
                 ...turnInput.message,
-                text: goalCommand
-                  ? turnInput.message.text
-                  : withProviderMessageOrigin(turnInput.message, turnInput.message.text),
+                text: withProviderMessageOrigin(
+                  turnInput.message,
+                  turnInput.message.text,
+                  input.session.driver,
+                ),
               },
             });
         yield* Effect.andThen(shouldStart, startTurn).pipe(

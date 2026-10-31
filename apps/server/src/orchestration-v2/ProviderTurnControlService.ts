@@ -381,6 +381,7 @@ export const layer: Layer.Layer<
                     text: message.text,
                     records: message.context?.records ?? [],
                   }),
+                  loaded.session.value.driver,
                 ),
                 attachments: message.attachments,
                 createdBy: message.createdBy,
