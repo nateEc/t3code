@@ -1649,11 +1649,16 @@ export const layer: Layer.Layer<
           const heading = isCrossThreadAgentMessage(turnInput.message)
             ? "Agent message:"
             : "User message:";
-          const text = goalCommand ? userText : withInlineContext(context, userText, heading);
+          const outgoingText = turnInput.message.text;
+          const text = goalCommand
+            ? outgoingText
+            : withInlineContext(context, outgoingText, heading);
           yield* start({
             ...(noteContinuation ? promptedInput : turnInput),
             message: { ...turnInput.message, text },
-            ...(text === userText ? {} : { inlineContextLength: text.length - userText.length }),
+            ...(text === outgoingText
+              ? {}
+              : { inlineContextLength: text.length - outgoingText.length }),
           }).pipe(
             // Clear pending handoff markers for refused prompts so the next turn retains the native session.
             Effect.tapError((error) =>
