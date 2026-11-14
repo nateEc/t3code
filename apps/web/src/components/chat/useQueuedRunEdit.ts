@@ -97,13 +97,6 @@ interface QueuedRunEditContent {
   readonly replyTo?: ResponseContextRecord | null;
 }
 
-function queuedEditDraftTarget(routeThreadRef: ScopedThreadRef, runId: RunId) {
-  return DraftId.make(`queued-edit:${scopedThreadKey(routeThreadRef)}:${runId}`);
-}
-
-const isDraftOwnedRecord = (record: ComposerContextRecord) =>
-  record.kind === "thread" || record.kind === "environment";
-
 async function submitQueuedRunEdit(input: {
   readonly environmentId: EnvironmentId;
   readonly draftTarget: ComposerThreadTarget;

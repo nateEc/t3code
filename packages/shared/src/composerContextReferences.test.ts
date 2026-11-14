@@ -626,6 +626,19 @@ describe("composer recall provenance", () => {
         composerRecallContext(revised, revised, previous, "Ultrathink:\nold"),
       ),
     ).toBe("old revised");
+    const repeated = "Ultrathink:\nthink";
+    const repeatedEdit = "Ultrathink:\nthink harder";
+    expect(
+      recallComposerText(
+        repeatedEdit,
+        composerRecallContext(
+          repeatedEdit,
+          repeatedEdit,
+          composerRecallContext(repeated, "think"),
+          repeated,
+        ),
+      ),
+    ).toBe("think harder");
     // A message sent without provenance stays on the legacy fallback, saved unchanged or edited.
     const legacy = "Ultrathink:\nold";
     expect(composerRecallContext(legacy, legacy, undefined, legacy)).toBeUndefined();

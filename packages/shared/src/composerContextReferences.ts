@@ -512,6 +512,16 @@ function withoutBackedReferences(text: string, ids: ReadonlySet<string>): string
   return text;
 }
 
+/** Search the body of an effort-decorated prompt before considering matches inside its prefix. */
+function findAuthoredText(sentText: string, text: string): number {
+  if (text.length === 0) return -1;
+  if (sentText.startsWith(CLAUDE_ULTRATHINK_PREFIX) && !text.startsWith(CLAUDE_ULTRATHINK_PREFIX)) {
+    const bodyMatch = sentText.indexOf(text, CLAUDE_ULTRATHINK_PREFIX.length);
+    if (bodyMatch !== -1) return bodyMatch;
+  }
+  return sentText.indexOf(text);
+}
+
 /** Capture text-only recall while the composer still knows what it, rather than the app, supplied. */
 export function composerRecallContext(
   sentText: string,
@@ -534,12 +544,26 @@ export function composerRecallContext(
   if (!unchangedDraft && previousSentText !== undefined && context?.composerRecall !== undefined) {
     // The queued editor shows the sent text, so the decoration around the
     // previously authored text (an effort prefix) stays generated after an edit.
+    const recall = context.composerRecall;
     const authored = recallComposerText(previousSentText, context).trim();
-    const previous = withoutBackedReferences(previousSentText, ids);
-    const at = authored.length > 0 ? previous.indexOf(authored) : -1;
-    if (at >= 0) {
-      const prefix = previous.slice(0, at);
-      const suffix = previous.slice(at + authored.length);
+    const at =
+      typeof recall === "string" ||
+      (previousSentText.startsWith(CLAUDE_ULTRATHINK_PREFIX) &&
+        recall[0] < CLAUDE_ULTRATHINK_PREFIX.length &&
+        recall[1] <= CLAUDE_ULTRATHINK_PREFIX.length)
+        ? findAuthoredText(previousSentText, authored)
+        : recall[0];
+    const end = typeof recall === "string" || at !== recall[0] ? at + authored.length : recall[1];
+    if (
+      authored.length > 0 &&
+      Number.isSafeInteger(at) &&
+      Number.isSafeInteger(end) &&
+      at >= 0 &&
+      end >= at &&
+      end <= previousSentText.length
+    ) {
+      const prefix = withoutBackedReferences(previousSentText.slice(0, at), ids);
+      const suffix = withoutBackedReferences(previousSentText.slice(end), ids);
       if (
         text.length >= prefix.length + suffix.length &&
         text.startsWith(prefix) &&
@@ -563,7 +587,7 @@ export function composerRecallContext(
   ) {
     return base.records.length > 0 || base.guest ? base : undefined;
   }
-  const start = text.length > 0 ? sentText.indexOf(text) : -1;
+  const start = findAuthoredText(sentText, text);
   return {
     ...base,
     composerRecall: start < 0 ? text : [start, start + text.length],
