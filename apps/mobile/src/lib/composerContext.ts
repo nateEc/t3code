@@ -10,6 +10,8 @@ import {
 } from "@t3tools/shared/composerContextReferences";
 import { filePreviewKind } from "@t3tools/shared/filePreview";
 import { videoMimeType } from "@t3tools/shared/video";
+import { msg } from "gt-react-native";
+import { m } from "../i18n/messages";
 import {
   COMPOSER_CONTEXT_MAX_RECORDS,
   COMPOSER_CONTEXT_REVIEW_TEXT_MAX_CHARS,
@@ -45,10 +47,14 @@ export function composerContextSendBlockReason(
 ): string | null {
   if (!context) return null;
   if (context.records.length > COMPOSER_CONTEXT_MAX_RECORDS) {
-    return `Remove context items until there are at most ${COMPOSER_CONTEXT_MAX_RECORDS}.`;
+    return m(
+      msg("Remove context items until there are at most {max}.", {
+        max: COMPOSER_CONTEXT_MAX_RECORDS,
+      }),
+    );
   }
   return !isMessageContext(context) || decodeMessageContext(context)._tag === "None"
-    ? "This draft has too much context to send. Remove some context items and try again."
+    ? m(msg("This draft has too much context to send. Remove some context items and try again."))
     : null;
 }
 
@@ -146,6 +152,7 @@ export function pullRequestComposerContext(
       ? sanitizeComposerContextLabel(path.split("/").at(-1) ?? path, "file")
       : `#${metadata.number}`,
     sectionId: `pull-request:${metadata.number}`,
+    // oxlint-disable-next-line t3code/no-untranslated-copy -- context record sent to the agent
     sectionTitle: `PR #${metadata.number}`,
     filePath: path || `PR #${metadata.number}`,
     startIndex: 0,
@@ -237,8 +244,8 @@ export function referencedComposerContext(text: string, context?: OrchestrationM
     }
   }
   const records = context.records.filter((record) => ids.has(record.contextId));
-  if (records.length === context.records.length) return context;
-  return records.length ? { version: 1 as const, records } : undefined;
+  if (records.length === 0) return undefined;
+  return records.length === context.records.length ? context : { version: 1 as const, records };
 }
 
 /** Uploads change attachment ids; keep context bindings attached to the same ordered file. */

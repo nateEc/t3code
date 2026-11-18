@@ -2,12 +2,14 @@ import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { describe, expect, it } from "vite-plus/test";
 import { composerRecallContext } from "@t3tools/shared/composerContextReferences";
+import type { ComposerThreadDraftState } from "../../composerDraftStore";
 import { formatInlineContextReference } from "../../lib/composerContextReferences";
 import { threadContextReference } from "../../lib/composerContextRecords";
 import { threadContextRecord } from "@t3tools/shared/composerContextReferences";
 import {
   approvalRedirectNotice,
   approvalFeedbackBlockReason,
+  composerDraftContentChanged,
   loadBalancingSendWarning,
   multipleModelSendBlock,
   referencedThreadContexts,
@@ -26,6 +28,46 @@ describe("approval feedback", () => {
     expect(approvalFeedbackBlockReason(1, context)).not.toBeNull();
     expect(approvalFeedbackBlockReason(0, { version: 1, records: [localThread] })).not.toBeNull();
   });
+});
+
+it("detects draft edits during upload preparation without treating upload metadata as an edit", () => {
+  const draft: ComposerThreadDraftState = {
+    prompt: "before",
+    images: [],
+    files: [
+      {
+        type: "file",
+        id: "file",
+        name: "a.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1,
+        file: null,
+      },
+    ],
+    nonPersistedImageIds: [],
+    persistedAttachments: [],
+    terminalContexts: [],
+    previewAnnotations: [],
+    reviewComments: [],
+    threadContexts: [],
+    environmentContexts: [],
+    replyTo: null,
+    modelSelectionByProvider: {},
+    activeProvider: null,
+    runtimeMode: null,
+    interactionMode: null,
+  };
+  expect(
+    composerDraftContentChanged(draft, {
+      ...draft,
+      files: [{ ...draft.files[0]!, uploadedAttachmentId: "upload", uploadEnvironmentId: local }],
+    }),
+  ).toBe(false);
+  expect(composerDraftContentChanged(draft, { ...draft, prompt: "after" })).toBe(true);
+  expect(composerDraftContentChanged(draft, { ...draft, files: [] })).toBe(true);
+  expect(composerDraftContentChanged(draft, { ...draft, threadContexts: [localThread] })).toBe(
+    true,
+  );
 });
 
 describe("referencedThreadContexts", () => {

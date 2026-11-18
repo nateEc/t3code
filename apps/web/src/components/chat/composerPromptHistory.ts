@@ -1,38 +1,47 @@
 import { resolveUserMessagePresentation } from "@t3tools/client-runtime/user-message";
-import type { OrchestrationMessageContext } from "@t3tools/contracts";
 import {
+  EnvironmentContextRecord,
+  type OrchestrationMessageContext,
+  ThreadContextRecord,
+} from "@t3tools/contracts";
+import {
+  collectComposerContextReferences,
   recallComposerText,
   stripLegacyPromptDecoration,
 } from "@t3tools/shared/composerContextReferences";
+import { Schema } from "effect";
 
 /** Sends record provenance; messages sent without it keep the legacy heuristic. */
 export function recallableComposerPrompt(
   messageText: string,
   context?: OrchestrationMessageContext,
+  keptContextIds?: ReadonlySet<string>,
 ): string {
   return context?.composerRecall === undefined
-    ? stripLegacyPromptDecoration(messageText)
+    ? stripLegacyPromptDecoration(messageText, keptContextIds)
     : recallComposerText(messageText, context);
 }
+
+const isThreadContextRecord = Schema.is(ThreadContextRecord);
+const isEnvironmentContextRecord = Schema.is(EnvironmentContextRecord);
 
 type ComposerPromptHistoryMessage = Parameters<typeof resolveUserMessagePresentation>[0] & {
   readonly id: string;
   readonly context?: OrchestrationMessageContext | undefined;
 };
 
-/** Appends a rewound message's authored prompt after whatever the user already drafted. */
-export function appendRewoundPrompt(
-  currentPrompt: string,
-  message: { readonly text: string; readonly context?: OrchestrationMessageContext | undefined },
-): string {
-  const restoredPrompt = recallableComposerPrompt(message.text, message.context);
-  if (restoredPrompt.length === 0) return currentPrompt;
-  return currentPrompt.length > 0 ? `${currentPrompt}\n\n${restoredPrompt}` : restoredPrompt;
+/** Thread and machine mentions; the draft holds these records, so recall can restore their chips. */
+export interface ComposerPromptHistoryMentions {
+  readonly threadContexts: ReadonlyArray<ThreadContextRecord>;
+  readonly environmentContexts: ReadonlyArray<EnvironmentContextRecord>;
 }
+
+const NO_MENTIONS: ComposerPromptHistoryMentions = { threadContexts: [], environmentContexts: [] };
 
 interface ComposerPromptHistoryEntry {
   readonly id: string;
   readonly prompt: string;
+  readonly mentions: ComposerPromptHistoryMentions;
 }
 
 export interface ComposerPromptHistoryPosition {
@@ -52,6 +61,49 @@ function findActive(
 interface ComposerPromptHistoryStep {
   readonly position: ComposerPromptHistoryPosition | null;
   readonly prompt: string;
+  readonly mentions: ComposerPromptHistoryMentions;
+}
+
+/** A sent message's text as the composer can hold it, with the mention records its chips need. */
+function recallComposerMessage(
+  message: Pick<ComposerPromptHistoryMessage, "text" | "context">,
+): Pick<ComposerPromptHistoryEntry, "prompt" | "mentions"> {
+  const records = message.context?.records ?? [];
+  const threadRecords = records.filter(isThreadContextRecord);
+  const environmentRecords = records.filter(isEnvironmentContextRecord);
+  const prompt = recallableComposerPrompt(
+    message.text,
+    message.context,
+    new Set([...threadRecords, ...environmentRecords].map((record) => record.contextId)),
+  );
+  // A record whose chip is gone from the text would put the chip back when written to the draft.
+  const referenced = new Set<string>(
+    collectComposerContextReferences(prompt).map((reference) => reference.contextId),
+  );
+  return {
+    prompt,
+    mentions: {
+      threadContexts: threadRecords.filter((record) => referenced.has(record.contextId)),
+      environmentContexts: environmentRecords.filter((record) => referenced.has(record.contextId)),
+    },
+  };
+}
+
+/** Appends recalled text to the draft and returns the records its mentions use. */
+export function appendRewoundPrompt(
+  currentPrompt: string,
+  message: Pick<ComposerPromptHistoryMessage, "text" | "context">,
+): Pick<ComposerPromptHistoryEntry, "prompt" | "mentions"> {
+  const { prompt, mentions } = recallComposerMessage(message);
+  return {
+    prompt:
+      prompt.length === 0
+        ? currentPrompt
+        : currentPrompt.length > 0
+          ? `${currentPrompt}\n\n${prompt}`
+          : prompt,
+    mentions,
+  };
 }
 
 export function buildComposerPromptHistoryEntries(
@@ -62,16 +114,25 @@ export function buildComposerPromptHistoryEntries(
     if (message.role !== "user") continue;
     // Automations and other agents send user-role messages; recall only what the user typed.
     if (resolveUserMessagePresentation(message).attribution !== null) continue;
-    const prompt = recallableComposerPrompt(message.text, message.context);
+    const { prompt, mentions } = recallComposerMessage(message);
     if (prompt.length === 0) continue;
+    const entry = { id: message.id, prompt, mentions };
     const previous = entries[entries.length - 1];
     if (previous && previous.prompt === prompt) {
-      entries[entries.length - 1] = { id: message.id, prompt };
+      entries[entries.length - 1] = entry;
       continue;
     }
-    entries.push({ id: message.id, prompt });
+    entries.push(entry);
   }
   return entries;
+}
+
+function recall(entry: ComposerPromptHistoryEntry): ComposerPromptHistoryStep {
+  return {
+    position: { entryId: entry.id, recalled: entry.prompt },
+    prompt: entry.prompt,
+    mentions: entry.mentions,
+  };
 }
 
 export function stepComposerPromptHistory(input: {
@@ -88,11 +149,11 @@ export function stepComposerPromptHistory(input: {
     if (activeIndex < 0 && currentPrompt.length > 0) return null;
     const entry = entries[activeIndex < 0 ? entries.length - 1 : activeIndex - 1];
     if (!entry) return null;
-    return { position: { entryId: entry.id, recalled: entry.prompt }, prompt: entry.prompt };
+    return recall(entry);
   }
 
   if (activeIndex < 0) return null;
   const entry = entries[activeIndex + 1];
-  if (!entry) return { position: null, prompt: "" };
-  return { position: { entryId: entry.id, recalled: entry.prompt }, prompt: entry.prompt };
+  if (!entry) return { position: null, prompt: "", mentions: NO_MENTIONS };
+  return recall(entry);
 }

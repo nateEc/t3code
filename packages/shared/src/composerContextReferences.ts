@@ -20,7 +20,7 @@ const CONTEXT_KIND_PATTERN = /^[a-z][a-z0-9-]{0,39}$/;
 const CONTEXT_ID_PATTERN = /^[a-z0-9_-]{1,128}$/i;
 const MAX_LINK_LABEL_LENGTH = 512;
 const CONTEXT_LINK = new RegExp(
-  String.raw`(!?)\[([^\]\n]{0,${MAX_LINK_LABEL_LENGTH}})\]\((${COMPOSER_CONTEXT_HREF_PREFIX}[^\s)]{1,200})\)`,
+  String.raw`(!?)\[([^[\]\n]{0,${MAX_LINK_LABEL_LENGTH}})\]\((${COMPOSER_CONTEXT_HREF_PREFIX}[^\s)]{1,200})\)`,
   "g",
 );
 
@@ -522,7 +522,7 @@ function findAuthoredText(sentText: string, text: string): number {
   return sentText.indexOf(text);
 }
 
-/** Capture text-only recall while the composer still knows what it, rather than the app, supplied. */
+/** Capture authored recall while the composer still knows what it, rather than the app, supplied. */
 export function composerRecallContext(
   sentText: string,
   composerText: string,
@@ -536,7 +536,12 @@ export function composerRecallContext(
     context?.composerRecall !== undefined &&
     composerText === stripAttachmentOnlyBootstrapPrompt(previousSentText);
   if (unchangedDraft && sentText === previousSentText) return context;
-  const ids = new Set(context?.records.map((record) => record.contextId));
+  // Thread and environment mentions remain editable chips when the draft restores their records.
+  const ids = new Set(
+    context?.records
+      .filter((record) => record.kind !== "thread" && record.kind !== "environment")
+      .map((record) => record.contextId),
+  );
   let text = withoutBackedReferences(
     unchangedDraft ? recallComposerText(previousSentText, context) : composerText,
     ids,
@@ -648,7 +653,10 @@ function stripInlineTerminalLabels(prompt: string, headers: ReadonlyArray<string
 }
 
 /** Main's spelling-based recall, kept for messages sent without `composerRecall`. */
-export function stripLegacyPromptDecoration(messageText: string): string {
+export function stripLegacyPromptDecoration(
+  messageText: string,
+  keptContextIds?: ReadonlySet<string>,
+): string {
   let prompt = messageText.trim();
   if (prompt.startsWith(CLAUDE_ULTRATHINK_PREFIX)) {
     prompt = prompt.slice(CLAUDE_ULTRATHINK_PREFIX.length);
@@ -679,6 +687,7 @@ export function stripLegacyPromptDecoration(messageText: string): string {
 
   // Recall strips chips because their backing records are absent.
   for (const reference of [...collectComposerContextReferences(prompt)].reverse()) {
+    if (keptContextIds?.has(reference.contextId)) continue;
     let { start, end } = reference;
     if (prompt[end] === " ") end += 1;
     else if (prompt[start - 1] === " ") start -= 1;
