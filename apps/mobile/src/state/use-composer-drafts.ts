@@ -1392,7 +1392,10 @@ export function setComposerDraftText(draftKey: string, value: string): void {
   let removed: ReadonlyArray<DraftComposerAttachment> = [];
   updateComposerDrafts((current) => {
     const existing = normalizeDraft(current[draftKey]);
-    let context = referencedComposerContext(value, existing.context);
+    let context =
+      value === existing.text && existing.context?.composerRecall !== undefined
+        ? existing.context
+        : referencedComposerContext(value, existing.context);
     if (value !== existing.text && context?.composerRecall !== undefined) {
       const { composerRecall: _previousRecall, ...editedContext } = context;
       context = editedContext;

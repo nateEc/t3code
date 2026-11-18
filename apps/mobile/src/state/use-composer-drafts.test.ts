@@ -546,7 +546,8 @@ describe("mobile composer drafts", () => {
       }).drafts.thread!;
       const sent = serializeComposerMessageForServer(edited.text, edited.context);
       expect(recallComposerText(sent.text, sent.context)).toBe(editedAuthored);
-      expect(edited.context?.records).toEqual(context.records);
+      expect(edited.context?.composerRecall).toBeUndefined();
+      expect(edited.context?.records ?? []).toEqual(context.records);
     },
   );
 
